@@ -1,0 +1,41 @@
+int sensorValue;
+int sensorLow = 1024;
+int sensorHigh = 0;
+
+const int ledPin = 13;
+
+void setup() {
+  // put your setup code here, to run once:
+
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, HIGH);
+
+  while( millis() < 5000 ) {
+   sensorValue = analogRead(A0);
+     
+    if( sensorValue > sensorHigh ) {
+      sensorHigh = sensorValue; 
+    }
+    else if( sensorValue < sensorLow ) {
+      sensorLow = sensorValue;
+    }
+  }
+  
+  digitalWrite(ledPin, LOW);
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+
+  sensorValue = analogRead(A0);
+
+  /*
+  use map() to convert the range we have from our sensor calibration
+  to drive the output at a pitch of between 50 and 4000 hertz.
+  */
+  int pitch = map(sensorValue, sensorLow, sensorHigh, 50, 4000);
+  
+  tone(8, pitch, 20);
+  
+  delay(10);
+}
