@@ -1,6 +1,7 @@
 #include "CapacitiveSensor.h"
 #define SERIAL_DEBUG 1
-const unsigned int statusBit = 13;
+const unsigned int statusPin = 13;
+bool statusLight = false;
 
 // DAC and waveform variables
 const unsigned int outputResolution = 256;
@@ -18,6 +19,8 @@ const unsigned int max_pitch = 10000;
 CapacitiveSensor pitch_sensor = CapacitiveSensor(8,9);        // 10M resistor between pins 8 & 9, pin 9 is sensor pin, add a wire and or foil
 CapacitiveSensor volume_sensor = CapacitiveSensor(10,11);        // 10M resistor between pins 10 & 11, pin 11 is sensor pin, add a wire and or foil
 const unsigned int sample_size = 30; // Currently the default provided by the example
+const unsigned int max_samples = 5;
+const unsigned int max_sample_millis = 100;
 
 
 const unsigned long clockSpeed = 16000000;
@@ -43,7 +46,7 @@ void adjustFrequency() {
 }
 
 void initPins() {
-  pinMode(statusBit, OUTPUT);
+  pinMode(statusPin, OUTPUT);
   
   // This maps to PORTD, which is being used below
   for(int i = 0; i < 8; i++) {
@@ -99,7 +102,7 @@ void initClock() {
 void setup() {
   initPins();
 
-  digitalWrite(statusBit, HIGH);
+  digitalWrite(statusPin, HIGH);
 
 #ifdef SERIAL_DEBUG
   Serial.begin(9600);
@@ -108,35 +111,59 @@ void setup() {
   initWaveform();
   initClock();
  
-  digitalWrite(statusBit, LOW);
+  digitalWrite(statusPin, LOW);
 }
 
 void loop() {
-  // Make the light blink or something...
+  statusLight = statusLight ? false : true;
+  digitalWrite(statusPin, statusLight ? HIGH : LOW);
   
-  long pitch_raw = pitch_sensor.capacitiveSensorRaw(sample_size);
-  //long volume_raw = volume_sensor.capacitiveSensor(sample_size);
+  long start = millis();
+  unsigned int samples_taken;
+  long sample[max_samples];
   
-  if(pitch_raw > 0) {
-    target_frequency = (pitch_raw - 4500); // / 2;
+  do {
+    const long raw_pitch = pitch_sensor.capacitiveSensorRaw(sample_size);
+    //long volume_raw = volume_sensor.capacitiveSensor(sample_size);
+  
+    if(raw_pitch <= 0) {
+      break;
+    }
+    else {
+      sample[samples_taken] = raw_pitch; 
+    }
+
+    delay(1);
+  }
+  while(++samples_taken < max_samples && millis() - start < max_sample_millis);
+
+  if(!samples_taken) {
+    target_frequency = max_pitch; 
   }
   else {
-   target_frequency = max_pitch; 
+    long running_total = 0;
+    for(int i = 0; i < samples_taken; ++i) {
+      running_total += sample[i];
+    }
+    target_frequency = (running_total / samples_taken) - 2000;
   }
 
-#ifdef SERIAL_DEBUG
+
+#if SERIAL_DEBUG
+  long duration = millis() - start;
+  
   // Serial output is disrupted by the timer.
   // This disables global interrupts
   cli();
-  Serial.print("Raw Pitch: ");
-  Serial.print(pitch_raw);
-  Serial.print("\tPitch: ");
-  Serial.println(target_frequency);
+  Serial.print("Pitch: ");
+  Serial.print(target_frequency);
+  Serial.print("Samples: ");
+  Serial.print(samples_taken);
+  Serial.print("\tsensing time: ");
+  Serial.println(duration);
   // Reenable interrupts
   sei();
 #endif
-
-  delay(10);
 }
 
 // Use the timer based interrupt configured in setup to update
